@@ -167,6 +167,7 @@ def print_usage(prog):
     print "  --port        print the port used for a tunnel and exit"
     print "  --background  go into the background after the SSH connection"
     print "                has been established."
+    print
     print "  all other options are passed on to ssh"
     print
 
@@ -187,6 +188,9 @@ def print_list():
 
     all_tunnels = config.get("tunnels")
     if not all_tunnels:
+        print >>sys.stderr, "You do not have any tunnels set up.",
+        print >>sys.stderr, "You can define them in ",
+        print >>sys.stderr, os.path.join(directory, "config")
         return
 
     format = "%-15s %-15s %7s"
