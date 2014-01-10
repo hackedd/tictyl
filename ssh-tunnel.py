@@ -3,10 +3,12 @@ import os
 import sys
 import yaml
 import time
+import fcntl
 import pipes
 import errno
 import socket
 import subprocess
+from contextlib import contextmanager
 
 
 __version__ = "1.0a1"
@@ -60,6 +62,23 @@ def which(program):
             return filename
 
     return None
+
+
+@contextmanager
+def locked_open(filename, mode, operation=None):
+    if operation is None:
+        if mode.startswith("r") and not mode.startswith("r+"):
+            operation = fcntl.LOCK_SH
+        else:
+            operation = fcntl.LOCK_EX
+
+    try:
+        fp = open(filename, mode)
+        fcntl.lockf(fp, operation)
+        yield fp
+    finally:
+        fcntl.lockf(fp, fcntl.LOCK_UN)
+        fp.close()
 
 
 def check_pid(pid):
@@ -288,39 +307,40 @@ if __name__ == "__main__":
 
         print_port(hostname, tunnel)
 
-    # TODO: Maybe lock the status file?
-    host_processes = status.setdefault(hostname, {})
-    cmdline = [ssh]
+    status_file = os.path.join(directory, "status")
 
-    # Figure out what tunnels are not yet connected.
-    tunnel_names = set(tunnels.keys())
-    for host_process in host_processes:
-        tunnel_names -= set(host_processes["ports"].keys())
+    with locked_open(status_file, "w") as fp:
+        host_processes = status.setdefault(hostname, {})
+        cmdline = [ssh]
 
-    tunnel_ports = {}
-    for name in tunnel_names:
-        port = get_free_port()
-        cmdline.append(format_ssh_forward(tunnels[name], port))
-        tunnel_ports[name] = port
+        # Figure out what tunnels are not yet connected.
+        tunnel_names = set(tunnels.keys())
+        for host_process in host_processes:
+            tunnel_names -= set(host_processes["ports"].keys())
 
-    if background:
-        socket_name = get_socket_name(directory, hostname)
-        cmdline.extend(["-f", "-M", "-S", socket_name])
-    else:
-        socket_name = None
+        tunnel_ports = {}
+        for name in tunnel_names:
+            port = get_free_port()
+            cmdline.append(format_ssh_forward(tunnels[name], port))
+            tunnel_ports[name] = port
 
-    cmdline.extend(ssh_args)
-    proc = subprocess.Popen(cmdline)
+        if background:
+            socket_name = get_socket_name(directory, hostname)
+            cmdline.extend(["-f", "-M", "-S", socket_name])
+        else:
+            socket_name = None
 
-    host_processes[proc.pid] = {
-        "pid": proc.pid,
-        "cmd": cmdline,
-        "socket": socket_name,
-        "ports": tunnel_ports
-    }
-    write_yaml_file(directory, "status", status)
+        cmdline.extend(ssh_args)
+        proc = subprocess.Popen(cmdline)
 
-    # TODO: If we lock the status file, now would be a good time to unlock it
+        host_processes[proc.pid] = {
+            "pid": proc.pid,
+            "cmd": cmdline,
+            "socket": socket_name,
+            "ports": tunnel_ports
+        }
+
+        yaml.dump(status, fp, default_flow_style=False)
 
     proc.wait()
 
@@ -329,10 +349,12 @@ if __name__ == "__main__":
         # socket to check on the new process.
         background_wait(ssh, socket_name, hostname)
 
-    # TODO: Maybe lock the status file?
-    status = load_yaml_file(directory, "status")
-    host_processes = status[hostname]
-    del host_processes[proc.pid]
-    if not host_processes:
-        del status[hostname]
-    write_yaml_file(directory, "status", status)
+    with locked_open(status_file, "r+") as fp:
+        status = yaml.load(fp)
+
+        host_processes = status[hostname]
+        del host_processes[proc.pid]
+        if not host_processes:
+            del status[hostname]
+
+        yaml.dump(status, fp, default_flow_style=False)
