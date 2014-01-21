@@ -7,11 +7,14 @@ import fcntl
 import pipes
 import errno
 import socket
+import struct
+import random
 import subprocess
 from contextlib import contextmanager
 
-
-__version__ = "1.0a1"
+MUX_PROTOCOL_VERSION = 4
+MUX_MSG_HELLO = 0x00000001
+MUX_C_ALIVE_CHECK = 0x10000004
 
 
 def get_config_directory(app, create=True):
@@ -95,28 +98,54 @@ def check_pid(pid):
             raise
 
 
-def check_socket(ssh, socket, hostname):
-    if not os.path.exists(socket):
-        return False
+def ssh_mux_send_message(s, format, *args):
+    message = struct.pack(format, *args) if args else format
+    length = struct.pack(">I", len(message))
+    s.sendall(length + message)
 
-    # TODO: Figure out the socket protocol, so we can connect to the socket
-    # ourselves. This would save spawning a SSH process each time we want to
-    # check the socket in `background_wait`.
 
-    check_command = [ssh, "-S", socket, "-O", "check", hostname]
+def ssh_mux_read(s):
+    length, = struct.unpack(">I", s.recv(4))
+    message = s.recv(length)
+    assert len(message) == length
+    return message
 
+
+def ssh_mux_connect(socket_name):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.connect(socket_name)
+
+    ssh_mux_send_message(s, ">II", MUX_MSG_HELLO, MUX_PROTOCOL_VERSION)
+
+    identifier, version = struct.unpack(">II", ssh_mux_read(s))
+    assert version == MUX_PROTOCOL_VERSION
+
+    return s
+
+
+def check_socket(ssh, socket_name, hostname):
+    if isinstance(socket_name, socket.socket):
+        s = socket_name
+    else:
+        try:
+            s = ssh_mux_connect(socket_name)
+        except socket.error as ex:
+            if ex.errno == errno.ENOENT:
+                return False
+            raise
+
+    request_id = random.randint(0, 0xFFFFFFFF)
     try:
-        output = subprocess.check_output(check_command,
-                                         stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError:
-        return False
+        ssh_mux_send_message(s, ">II", MUX_C_ALIVE_CHECK, request_id)
+    except socket.error as ex:
+        if ex.errno == errno.EPIPE:
+            return False
+        raise
 
-    if output.startswith("Master running"):
-        return True
+    identifier, response_id, pid = struct.unpack(">III", ssh_mux_read(s))
+    assert response_id == request_id
 
-    print >>sys.stderr, "ssh-tunnel: unrecognized ouput:"
-    print >>sys.stderr, output.strip()
-    return False
+    return True
 
 
 def get_free_port():
@@ -149,9 +178,22 @@ def background_wait(ssh, socket, hostname, interval=60):
     if os.fork() != 0:
         os._exit(0)
 
+    try:
+        s = ssh_mux_connect(socket)
+    except socket.error as ex:
+        if ex.errno == errno.ENOENT:
+            return
+        raise
+
     time.sleep(interval)
-    while check_socket(ssh, socket, hostname):
+
+    while check_socket(ssh, s, hostname):
         time.sleep(interval)
+
+    try:
+        s.close()
+    except socket.error:
+        pass
 
 
 def format_ssh_forward(tunnel, local_port):
@@ -315,8 +357,8 @@ if __name__ == "__main__":
 
         # Figure out what tunnels are not yet connected.
         tunnel_names = set(tunnels.keys())
-        for host_process in host_processes:
-            tunnel_names -= set(host_processes["ports"].keys())
+        for pid, process in host_processes.iteritems():
+            tunnel_names -= set(process["ports"].keys())
 
         tunnel_ports = {}
         for name in tunnel_names:
