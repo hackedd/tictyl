@@ -405,4 +405,7 @@ if __name__ == "__main__":
         if not host_processes:
             del status[hostname]
 
+        fp.seek(0, os.SEEK_SET)
+        fp.truncate()
+
         yaml.dump(status, fp, default_flow_style=False)
