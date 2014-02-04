@@ -198,7 +198,7 @@ def background_wait(ssh, socket, hostname, interval=60):
 
 def format_ssh_forward(tunnel, local_port):
     if isinstance(tunnel, dict):
-        host = tunnel["host"]
+        host = tunnel.get("host", "localhost")
         port = tunnel["port"]
     else:
         host = "localhost"
