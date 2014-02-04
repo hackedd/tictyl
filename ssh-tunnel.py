@@ -264,7 +264,13 @@ def print_list():
         connected = {}
         if hostname in status:
             for pid, process in status[hostname].iteritems():
-                connected.update(process["ports"])
+                if process["socket"]:
+                    alive = check_socket(ssh, process["socket"], hostname)
+                else:
+                    alive = check_pid(pid)
+
+                if alive:
+                    connected.update(process["ports"])
 
         for name in sorted(tunnels.keys()):
             print format % (hostname, name, connected.get(name, "-"))
