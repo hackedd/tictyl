@@ -123,7 +123,7 @@ def ssh_mux_connect(socket_name):
     return s
 
 
-def check_socket(ssh, socket_name, hostname):
+def check_socket(socket_name, hostname):
     if isinstance(socket_name, socket.socket):
         s = socket_name
     else:
@@ -187,7 +187,7 @@ def background_wait(ssh, socket, hostname, interval=60):
 
     time.sleep(interval)
 
-    while check_socket(ssh, s, hostname):
+    while check_socket(s, hostname):
         time.sleep(interval)
 
     try:
@@ -265,7 +265,7 @@ def print_list():
         if hostname in status:
             for pid, process in status[hostname].iteritems():
                 if process["socket"]:
-                    alive = check_socket(ssh, process["socket"], hostname)
+                    alive = check_socket(process["socket"], hostname)
                 else:
                     alive = check_pid(pid)
 
@@ -291,7 +291,7 @@ def print_port(hostname, tunnel):
 
     for pid, process in host_processes.iteritems():
         if process["socket"]:
-            alive = check_socket(ssh, process["socket"], hostname)
+            alive = check_socket(process["socket"], hostname)
         else:
             alive = check_pid(pid)
 
