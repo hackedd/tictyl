@@ -243,17 +243,7 @@ def print_error(message, *args, **kwargs):
     sys.exit(status)
 
 
-def print_list():
-    config = load_yaml_file(directory, "config")
-    status = load_yaml_file(directory, "status")
-
-    all_tunnels = config.get("tunnels")
-    if not all_tunnels:
-        print >>sys.stderr, "You do not have any tunnels set up.",
-        print >>sys.stderr, "You can define them in ",
-        print >>sys.stderr, os.path.join(directory, "config")
-        return
-
+def print_list(all_tunnels, status):
     format = "%-15s %-15s %7s"
     print format % ("Host", "Tunnel", "Status")
     print "-" * 39
@@ -276,7 +266,7 @@ def print_list():
             print format % (hostname, name, connected.get(name, "-"))
 
 
-def print_port(hostname, tunnel):
+def print_port(hostname, tunnel, tunnels, status):
     if not tunnel:
         if len(tunnels) != 1:
             print_error("tunnel name not specified")
@@ -310,7 +300,7 @@ def print_port(hostname, tunnel):
     sys.exit(0)
 
 
-if __name__ == "__main__":
+def main():
     ssh_args = []
     do_print_port = False
     hostname = None
@@ -318,13 +308,21 @@ if __name__ == "__main__":
     background = False
 
     directory = get_config_directory("ssh-tunnel")
+    config = load_yaml_file(directory, "config")
+    status = load_yaml_file(directory, "status")
+    all_tunnels = config.get("tunnels", {})
 
     for arg in sys.argv[1:]:
         if arg == "--help":
             print_usage(sys.argv[0])
             sys.exit(0)
         elif arg == "--list":
-            print_list()
+            if not all_tunnels:
+                print >>sys.stderr, "You do not have any tunnels set up.",
+                print >>sys.stderr, "You can define them in ",
+                print >>sys.stderr, os.path.join(directory, "config")
+            else:
+                print_list(all_tunnels, status)
             sys.exit(0)
         elif arg == "--port":
             do_print_port = True
@@ -338,10 +336,6 @@ if __name__ == "__main__":
                     tunnel = arg
             ssh_args.append(arg)
 
-    config = load_yaml_file(directory, "config")
-    status = load_yaml_file(directory, "status")
-    all_tunnels = config.get("tunnels", {})
-
     if not hostname:
         print_error("not enough arguments")
 
@@ -353,7 +347,7 @@ if __name__ == "__main__":
             arguments = " ".join([pipes.quote(arg) for arg in ssh_args])
             print_error("unexpected arguments: %s", arguments)
 
-        print_port(hostname, tunnel)
+        print_port(hostname, tunnel, tunnels, status)
 
     status_file = os.path.join(directory, "status")
 
@@ -409,3 +403,7 @@ if __name__ == "__main__":
         fp.truncate()
 
         yaml.dump(status, fp, default_flow_style=False)
+
+
+if __name__ == "__main__":
+    main()
