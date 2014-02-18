@@ -239,7 +239,7 @@ def print_error(message, *args, **kwargs):
     if args:
         message = message % args
 
-    print >>sys.stderr, "ssh-tunnel:", message
+    print >>sys.stderr, "tictyl:", message
     sys.exit(status)
 
 
@@ -307,7 +307,7 @@ def main():
     tunnel = None
     background = False
 
-    directory = get_config_directory("ssh-tunnel")
+    directory = get_config_directory("tictyl")
     config = load_yaml_file(directory, "config")
     status = load_yaml_file(directory, "status")
     all_tunnels = config.get("tunnels", {})
