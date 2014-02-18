@@ -123,7 +123,7 @@ def ssh_mux_connect(socket_name):
     return s
 
 
-def check_socket(socket_name, hostname):
+def check_socket(socket_name):
     if isinstance(socket_name, socket.socket):
         s = socket_name
     else:
@@ -168,7 +168,7 @@ def get_socket_name(directory, hostname):
     return filename % number
 
 
-def background_wait(ssh, socket, hostname, interval=60):
+def background_wait(socket_name, interval=60):
     if os.fork() != 0:
         os._exit(0)
 
@@ -179,7 +179,7 @@ def background_wait(ssh, socket, hostname, interval=60):
         os._exit(0)
 
     try:
-        s = ssh_mux_connect(socket)
+        s = ssh_mux_connect(socket_name)
     except socket.error as ex:
         if ex.errno == errno.ENOENT:
             return
@@ -187,7 +187,7 @@ def background_wait(ssh, socket, hostname, interval=60):
 
     time.sleep(interval)
 
-    while check_socket(s, hostname):
+    while check_socket(s):
         time.sleep(interval)
 
     try:
@@ -257,7 +257,7 @@ def print_list(all_tunnels, status):
         if hostname in status:
             for pid, process in status[hostname].iteritems():
                 if process["socket"]:
-                    alive = check_socket(process["socket"], hostname)
+                    alive = check_socket(process["socket"])
                 else:
                     alive = check_pid(pid)
 
@@ -283,7 +283,7 @@ def print_port(hostname, tunnel, tunnels, status):
 
     for pid, process in host_processes.iteritems():
         if process["socket"]:
-            alive = check_socket(process["socket"], hostname)
+            alive = check_socket(process["socket"])
         else:
             alive = check_pid(pid)
 
@@ -391,7 +391,7 @@ def main():
     if background and proc.returncode == 0:
         # The original SSH process has now exited, but we can use the control
         # socket to check on the new process.
-        background_wait(ssh, socket_name, hostname)
+        background_wait(socket_name)
 
     with locked_open(status_file, "r+") as fp:
         status = yaml.load(fp)
