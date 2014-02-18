@@ -12,6 +12,9 @@ import random
 import subprocess
 from contextlib import contextmanager
 
+
+__version__ = "1.0.1"
+
 MUX_PROTOCOL_VERSION = 4
 MUX_MSG_HELLO = 0x00000001
 MUX_C_ALIVE_CHECK = 0x10000004
