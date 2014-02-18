@@ -233,13 +233,15 @@ def print_usage(prog):
     print
 
 
-def print_error(message, *args, **kwargs):
-    status = kwargs.pop("status", 1)
-
+def print_message(message, *args):
     if args:
         message = message % args
-
     print >>sys.stderr, "tictyl:", message
+
+
+def print_error(message, *args, **kwargs):
+    print_message(message, *args)
+    status = kwargs.pop("status", 1)
     sys.exit(status)
 
 
@@ -318,9 +320,9 @@ def main():
             sys.exit(0)
         elif arg == "--list":
             if not all_tunnels:
-                print >>sys.stderr, "You do not have any tunnels set up.",
-                print >>sys.stderr, "You can define them in ",
-                print >>sys.stderr, os.path.join(directory, "config")
+                print_message("You do not have any tunnels set up. You can " +
+                              "define them in %s",
+                              os.path.join(directory, "config"))
             else:
                 print_list(all_tunnels, status)
             sys.exit(0)
